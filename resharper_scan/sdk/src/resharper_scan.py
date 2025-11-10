@@ -103,20 +103,38 @@ def update_editorconfig_template(template_path, config_lines, output_path=None):
     return output_path
 
 
+def main(input_json_path, editorconfig_output_path):
+    """
+    主函数：根据input.json生成.editorconfig文件
+    
+    Args:
+        input_json_path: input.json文件路径
+        editorconfig_output_path: .editorconfig文件输出路径（应放在.sln文件同级目录）
+    
+    Returns:
+        str: 生成的.editorconfig文件路径
+    """
+    # 获取模板文件路径
+    template_path = os.path.join(os.path.dirname(__file__), "..", "resharper_configs", "editorconfig.template")
+    
+    # 1. 获取并替换severity的inspections
+    inspections = replace_severity_from_input(input_json_path)
+    
+    # 2. 从inspections生成editorconfig配置行
+    config_lines = generate_editorconfig_from_inspections(inspections)
+    
+    # 3. 更新editorconfig_template文件并输出到指定路径
+    output_path = update_editorconfig_template(template_path, config_lines, editorconfig_output_path)
+    
+    print(f"已生成 {len(config_lines)} 条配置规则")
+    print(f"editorconfig文件已生成: {output_path}")
+    
+    return output_path
+
+
 # 测试用
 if __name__ == "__main__":
     input_json_path = os.path.join(os.path.dirname(__file__), "..", "..", "test", "input.json")
-    template_path = os.path.join(os.path.dirname(__file__), "..", "resharper_configs", "editorconfig.template")
     temp_editorconfig_path = os.path.join(os.path.dirname(__file__), "..", "..", "test", "SampleConsoleApp", ".editorconfig")
-
-    # 1. 获取并替换severity的inspections
-    inspections = replace_severity_from_input(input_json_path)
-
-    # 2. 从inspections生成editorconfig配置行
-    config_lines = generate_editorconfig_from_inspections(inspections)
-
-    # 3. 更新editorconfig_template文件
-    output_path = update_editorconfig_template(template_path, config_lines, temp_editorconfig_path)
-
-    print(f"已生成 {len(config_lines)} 条配置规则")
-    print(f"editorconfig文件已更新: {output_path}")
+    
+    main(input_json_path, temp_editorconfig_path)

@@ -7,8 +7,9 @@ import xml
 from xml.dom.minidom import Document
 from os import walk
 from sarif import loader
+import resharper_scan
 
-# 到21行都没啥用
+# 到22行都没啥用
 enableChecker = []
 checkerOptions = []
 incrementalFiles = ""
@@ -93,9 +94,9 @@ def write_output_json(filePath, defectData):
     open_file.close()
     print("output.json write complete")
 
-def execute_rsrp_cli_scan(outputFile):
+def execute_rsrp_cli_scan(output_file, input_json_file):
     """
-    TODO: 更改运行逻辑为从容器中运行，默认导出sarif格式的json报告
+    TODO: 执行ReSharper CLI扫描
     1. 容器内执行命令行 jb inspectcode <your_solution_file>.sln -o=output.json
     2. 运行前，需要将从input.json中提取并转换好的.editorconfig放入.sln文件同级目录下，ReSharper CLI会自动读取
     3. 运行后，需要删除.editorconfig临时文件
@@ -103,27 +104,46 @@ def execute_rsrp_cli_scan(outputFile):
     未涵盖边界情况：
     1. 项目中如果已经有editorconfig文件，则需要额外处理
     """
-
     print("start execute resharper tool scan")
     start_time = time.perf_counter()  # 记录开始时间
+    
+    # 获取.sln文件路径
     try:
-        slnPath = str(get_solution_file_path(scan_path))
+        sln_path = str(get_solution_file_path(scan_path))
     except Exception as e:
         error_defect = defect_pkg()
         error_defect.code = 500
-        error_defect.message = e.message
-        write_output_json(outputFile, error_defect)
+        error_defect.message = str(e)
+        write_output_json(output_file, error_defect)
         print("error: " + str(e))
         return
-    rsrp_cli_cmd = "jb inspectcode " + slnPath + "--jobs=4" +" -o=" + outputFile
+    
+    # 确定.editorconfig文件的输出路径（放在.sln文件同级目录）
+    sln_dir = os.path.dirname(sln_path)
+    temp_editorconfig_path = os.path.join(sln_dir, ".editorconfig")
+
+    # TODO: 生成.editorconfig文件;有可能与用户既有.editorconfig配置冲突，因此尝试捕错
+    try:
+        resharper_scan.main(input_json_file, temp_editorconfig_path)
+    except Exception as e:
+        error_defect = defect_pkg()
+        error_defect.code = 500
+        error_defect.message = f"生成.editorconfig文件失败: {str(e)}"
+        write_output_json(output_file, error_defect)
+        print("error: " + str(e))
+        return
+    
+    # 执行扫描
+    rsrp_cli_cmd = "jb inspectcode " + sln_path + " --jobs=4 -o=" + output_file
     os.system(rsrp_cli_cmd)
     elapsed_time = time.perf_counter() - start_time  # 计算耗时
     print("ReSharper CLI inspect code 结束, 耗时: {:.2f} 秒".format(elapsed_time))
-    # TODO: 删除临时生成的editorconfig文件,此处写死了测试用例
-    temp_editorconfig_path = os.path.join(os.path.dirname(__file__), "..", "..", "test", "SampleConsoleApp", ".editorconfig")
+    
+    # 清理临时生成的editorconfig文件
     if os.path.exists(temp_editorconfig_path):
         os.remove(temp_editorconfig_path)
-    parse_rsrp_cli_output(outputFile)
+        print(f"已清理临时文件: {temp_editorconfig_path}")
+    parse_rsrp_cli_output(output_file)
 
 
 def parse_rsrp_cli_output(output_file):
@@ -175,7 +195,9 @@ def main(argv):
         print('scan.py -i <inputfile> -o <outputfile> or --input <inputfile> -- output <output.json>')
         sys.exit()
     loadInputJson(input_json_file)
-    execute_rsrp_cli_scan(output_json_file)
+    
+    # 执行扫描（包括生成.editorconfig、执行扫描、清理临时文件）
+    execute_rsrp_cli_scan(output_json_file, input_json_file)
 
 
 if __name__ == "__main__":
