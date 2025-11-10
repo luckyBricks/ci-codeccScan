@@ -39,14 +39,18 @@ def update_severity_by_inspection_id(input_checkers, inspections):
         if inspection['id'] in id_checker_map:
             inspection['defaultSeverity'] = id_checker_map[inspection['id']]
 
-def replace_severity_from_input(inputJson_path):
+def replace_severity_from_input(input_json_path):
     """
     替换inspections对象中的severity为指定的severity
     """
-    inputJson_file = open(inputJson_path, encoding="UTF-8")
-    inputJson = json.load(inputJson_file)
+    try:
+        with open(input_json_path, encoding="UTF-8") as input_json_file:
+            input_json = json.load(input_json_file)
+    except (json.JSONDecodeError, IOError) as e:
+        raise ValueError(f"Failed to read input JSON file {input_json_path}: {e}")
+
     inspections = get_all_bkci_supported_inspections()
-    update_severity_by_inspection_id(inputJson['openCheckers'], inspections)
+    update_severity_by_inspection_id(input_json.get('openCheckers', []), inspections)
 
     return inspections
 

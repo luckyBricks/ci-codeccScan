@@ -9,7 +9,7 @@
     }
   ],
   "projName": "CODECC_8DDB382985370163",
-  "scanPath": "/data/landun/workspace/test",
+  "scanPath": "/usr/codecc/tool_scan/test/SampleConsoleApp",
   "scanType": "full",
   "skipPaths": [
     ".*/Lib/.*",

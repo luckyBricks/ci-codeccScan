@@ -2,23 +2,40 @@
 import json
 import os
 import sys
+import time
 import xml
 from xml.dom.minidom import Document
 from os import walk
+from sarif import loader
 
+# 到21行都没啥用
 enableChecker = []
 checkerOptions = []
 incrementalFiles = ""
 # 保存扫描路径 工具路径忽略有问题，暂时不支持
-scanPath = " "
+scan_path = " "
 scanType = "full"
 # 忽略扫描路径
 skipPath = []
 projName = ""
 windToolPath = "C:\\data\\codecc_software\\resharper_scan\\tool\\inspectcode.exe  "
 
+class DefectObj(object):
+    def __init__(self):
+        self.filePath = ''
+        self.line = 0
+        self.checkerName = ''
+        self.description = ''
+
+
+class defect_pkg(object):
+    def __init__(self):
+        self.code = 0
+        self.message = ''
+        self.defects = list()
 
 def loadInputJson(inputJson):
+    # input.json 加载被放入resharper_scan.py中，此处无修改
     file = open(inputJson, encoding="UTF-8")
     jsonData = json.load(file)
     print(jsonData)
@@ -52,8 +69,8 @@ def loadInputJson(inputJson):
                 incrementalFiles += jsonData['incrementalFiles'][i] + " "
 
     if 'scanPath' in jsonData:
-        global scanPath
-        scanPath = jsonData['scanPath']
+        global scan_path
+        scan_path = jsonData['scanPath']
 
     if 'scanType' in jsonData:
         global scanType
@@ -68,23 +85,15 @@ def loadInputJson(inputJson):
 
     file.close()
 
+def write_output_json(filePath, defectData):
+    print("start write output.json")
+    open_file = open(str(filePath), "w")
+    out_string = json.dumps(defectData, default=lambda obj: obj.__dict__)
+    open_file.write(out_string)
+    open_file.close()
+    print("output.json write complete")
 
-class DefectObj(object):
-    def __init__(self):
-        self.filePath = ''
-        self.line = 0
-        self.checkerName = ''
-        self.description = ''
-
-
-class DefectPkg(object):
-    def __init__(self):
-        self.code = 0
-        self.message = ''
-        self.defects = list()
-
-
-def executeResharperScanAndOutputFile(outputFile):
+def execute_rsrp_cli_scan(outputFile):
     """
     TODO: 更改运行逻辑为从容器中运行，默认导出sarif格式的json报告
     1. 容器内执行命令行 jb inspectcode <your_solution_file>.sln -o=output.json
@@ -95,58 +104,41 @@ def executeResharperScanAndOutputFile(outputFile):
     1. 项目中如果已经有editorconfig文件，则需要额外处理
     """
 
-    raise NotImplementedError("此处的功能需要改为从容器中运行")
     print("start execute resharper tool scan")
-    slnPath = str(getProjectClnPath(scanPath))
-    print("sln path : " + slnPath)
-    if slnPath == "":
-        errorDefect = DefectPkg()
-        errorDefect.code = 500
-        errorDefect.message = "没有找到解决方案.sln路径！"
-        writeOutputJson(outputFile, errorDefect)
+    start_time = time.perf_counter()  # 记录开始时间
+    try:
+        slnPath = str(get_solution_file_path(scan_path))
+    except Exception as e:
+        error_defect = defect_pkg()
+        error_defect.code = 500
+        error_defect.message = e.message
+        write_output_json(outputFile, error_defect)
+        print("error: " + str(e))
         return
-    xmlFile = str(slnPath.__hash__()) + ".xml"
-    runCmd = windToolPath + "  " + slnPath + "  --jobs=4 --build --format=xml --output=" + xmlFile
-    print("run cmd: " + runCmd)
-    os.system(runCmd)
-    print("resharper tool execute complete")
-    print("start parsing the exported xml file")
-    defect = DefectPkg()
-    xmlFileOpen = open(xmlFile, encoding="utf-8")
-    dom = xml.dom.minidom.parse(xmlFileOpen)
-    elements = dom.documentElement
-    ele = elements.getElementsByTagName("Issue")
-    projectPath = str(slnPath)[0:slnPath.rindex("\\")]
-    for e in ele:
-        typeId = e.getAttribute("TypeId")
-        if typeId in enableChecker:
-            obj = DefectObj()
-            filePath = str(e.getAttribute("File"))
-            if not filePath.startswith(scanPath):
-                filePath = projectPath + "\\" + filePath
-            obj.filePath = filePath
-            obj.checkerName = typeId
-            obj.description = e.getAttribute("Message")
-            if e.hasAttribute("Line"):
-                obj.line = e.getAttribute("Line")
-            else:
-                obj.line = 0
-            defect.defects.append(obj)
-    xmlFileOpen.close()
-    print("defect length: " + str(len(defect.defects)))
-    writeOutputJson(outputFile, defect)
+    rsrp_cli_cmd = "jb inspectcode " + slnPath + "--jobs=4" +" -o=" + outputFile
+    os.system(rsrp_cli_cmd)
+    elapsed_time = time.perf_counter() - start_time  # 计算耗时
+    print("ReSharper CLI inspect code 结束, 耗时: {:.2f} 秒".format(elapsed_time))
+    # TODO: 删除临时生成的editorconfig文件,此处写死了测试用例
+    temp_editorconfig_path = os.path.join(os.path.dirname(__file__), "..", "..", "test", "SampleConsoleApp", ".editorconfig")
+    if os.path.exists(temp_editorconfig_path):
+        os.remove(temp_editorconfig_path)
+    parse_rsrp_cli_output(outputFile)
 
 
-def writeOutputJson(filePath, defectData):
-    print("start write output.json")
-    openFile = open(str(filePath), "w")
-    outString = json.dumps(defectData, default=lambda obj: obj.__dict__)
-    openFile.write(outString)
-    openFile.close()
-    print("output.json write complete")
+def parse_rsrp_cli_output(output_file):
+    sarif_data = loader.load_sarif_file(output_file)
+    # 删除输出的json报告
+    if os.path.exists(output_file):
+        os.remove(output_file)
+    raise NotImplementedError("尚未实现利用sarif-tools解析ReSharper CLI输出的json报告；面对复杂分析结果，此依赖比直接json解析更快")
 
 
-def getProjectClnPath(path):
+
+def get_solution_file_path(path):
+    """
+    TODO: 之前的实现有错误，此方法获取解决方案.sln路径, 需要基于Linux路径实现
+    """
     filePath = ""
     outPath = [path + "\\.git", path + "\\.temp"]
     for root, dirs, files in os.walk(path):
@@ -157,12 +149,14 @@ def getProjectClnPath(path):
                 filePath = root + "\\" + file
         if filePath != "":
             break
+    if filePath == "":
+        raise Exception("没有找到解决方案.sln路径！")
     return filePath
 
 
 def main(argv):
-    inputJsonFile = ""
-    outputJsonFile = ""
+    input_json_file = ""
+    output_json_file = ""
 
     try:
         opts, args = getopt.getopt(argv, "hi:o:", ["input=", "output="])
@@ -174,14 +168,14 @@ def main(argv):
             print('scan.py -i <inputfile> -o <outputfile> or --input <inputfile> -- output <output.json>')
             sys.exit()
         elif opt in ("-i", "--input"):
-            inputJsonFile = arg
+            input_json_file = arg
         elif opt in ("-o", "--output"):
-            outputJsonFile = arg
-    if inputJsonFile == "" or outputJsonFile == "":
+            output_json_file = arg
+    if input_json_file == "" or output_json_file == "":
         print('scan.py -i <inputfile> -o <outputfile> or --input <inputfile> -- output <output.json>')
         sys.exit()
-    loadInputJson(inputJsonFile)
-    executeResharperScanAndOutputFile(outputJsonFile)
+    loadInputJson(input_json_file)
+    execute_rsrp_cli_scan(output_json_file)
 
 
 if __name__ == "__main__":

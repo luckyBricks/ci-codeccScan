@@ -4,9 +4,15 @@
 # 如果腾讯镜像中没有dotnet-sdk预装，则需要额外安装好dotnet-sdk，会慢
 FROM mcr.microsoft.com/dotnet/sdk:8.0
 
+# 安装Python
+# RUN apt-get update && apt-get install -y python3 python3-pip && \
+#     rm -rf /var/lib/apt/lists/*
+
+# 全局安装sarif-tools，用于解析sarif格式的json报告
+RUN pip3 install --system sarif-tools
+
 RUN mkdir -p /usr/codecc/tool_scan
 COPY sdk /usr/codecc/tool_scan/sdk
-COPY tool /usr/codecc/tool_scan/tool
 
 RUN dotnet new tool-manifest --name resharper
 RUN dotnet tool install -g JetBrains.ReSharper.GlobalTools
