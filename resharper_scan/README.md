@@ -1,72 +1,15 @@
 ## 当前版本
-resharper当前版本：2022.1.2
+resharper当前版本：2025.2.4
+
+CodeCC可配置项仅包含[C#相关检查规则](https://www.jetbrains.com/help/resharper/Reference__Code_Inspections_CSHARP.html)
 
 ## 环境介绍
 > 工具执行需要项目中包含`sln`文件
 
-> 本工具需要依赖本地windows构建机.net环境，使用之前请配好项目所依赖指定版本的所有环境
-
-> 依赖环境可以使用vs studio打开解决方案，如果系统缺少项目的依赖环境会提示安装，安装完即可
-
-> windows中还需要配置python3环境
-> 
-> 需要使用python3、python命令
-
-## 目录介绍
-sdk python执行脚本解析目录
-
-tool 工具二进制命令目录
-
-目录结构
-
-  ![](./img/m.png)
-
-## 入参文件(json)
-> projName 项目名称
-> 
-> scanPath 扫描路径，此处需使用绝对路径
-> 
-> openCheckers 检查的规则集
-
-openCheckers 子属性：
-> checkerName 规则名称
-> 
-> severity 告警级别
-> 
-> checkerOptions 携带的参数
-
-## 使用
-[ci-CodeCCCheckAtom](https://github.com/TencentBlueKing/ci-CodeCCCheckAtom)
-codecc插件也需要更新
-
-如果需要修改resharper的配置信息：
-- resource目录下的`config.properties`文件第23行可修改工具存放位置，其他resharper请勿更改
-- sdk\src\scan.py 脚本种的windToolPath常量也需要修改，因为是用的绝对路径写死的
-- ci-CodeCCCheckAtom  CodeccUtils.kt 的getResharperScanPy()方法需要修改下载路径
-- 默认保存路径：`C:\\data\\codecc_software\\resharper_scan`
-
-## 常见问题
-> A：resharper老是输出一些没用的告警
-> 
-> B：这可能是你的构建机上没有你扫描项目所需要的环境配置
-
-## 输出结构例子
-> {\
-      "filePath": "xxx.cs",\
-      "line": "8",\
-      "checkerName": "FieldCanBeMadeReadOnly.Global",\
-      "description": "Field can be made readonly"\
-    },\
-    {\
-      "filePath": "xxx.cs",\
-      "line": "16",\
-      "checkerName": "PossibleNullReferenceException",\
-      "description": "Possible 'System.NullReferenceException'"\
-    },\
-    {\
-      "filePath": "xxx.cs",\
-      "line": "20",\
-      "checkerName": "BaseObjectGetHashCodeCallInGetHashCode",\
-      "description": "Overridden 'GetHashCode()' calls base 'Object.GetHashCode()'"\
-    }
-
+## 运行原理
+1. 从 `resharper_scan/docker/Dockerfile`中构建包含最新版ReSharper CLI的容器
+2.  运行前，工具自动根据 `resharper_scan/sdk/src/resharper_scan.py` 读取input.json 
+3. 工具将匹配input.json对 `resharper_scan/sdk/resharper_inspections`所包含ReSharper默认检查规则的覆盖性修改 
+4. 工具将生成.editorconfig文件，放入.sln文件同级目录下 
+5. 在容器内执行 `jb inspectcode <your_solution_file>.sln -o=output.json`命令，ReSharper CLI自动读取EditorConfig
+6. 检测结果将输出到output.json中，为[sarif](https://github.com/microsoft/sarif-tutorials)格式报告

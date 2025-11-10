@@ -85,6 +85,17 @@ class DefectPkg(object):
 
 
 def executeResharperScanAndOutputFile(outputFile):
+    """
+    TODO: 更改运行逻辑为从容器中运行，默认导出sarif格式的json报告
+    1. 容器内执行命令行 jb inspectcode <your_solution_file>.sln -o=output.json
+    2. 运行前，需要将从input.json中提取并转换好的.editorconfig放入.sln文件同级目录下，ReSharper CLI会自动读取
+    3. 运行后，需要删除.editorconfig临时文件
+
+    未涵盖边界情况：
+    1. 项目中如果已经有editorconfig文件，则需要额外处理
+    """
+
+    raise NotImplementedError("此处的功能需要改为从容器中运行")
     print("start execute resharper tool scan")
     slnPath = str(getProjectClnPath(scanPath))
     print("sln path : " + slnPath)
